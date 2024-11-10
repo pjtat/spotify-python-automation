@@ -1,0 +1,55 @@
+{
+  "artists": [
+    {
+      "artist_id": "5Q81rlcTFh3k6DQJXPdsot",
+      "artwork_url": "https://i.scdn.co/image/ab6761610000e5eb3aca38c42551f532b6fefc16",
+      "genres": [
+        "channel islands indie",
+        "escape room",
+        "hyperpop",
+        "indie soul",
+        "vapor soul"
+      ]
+    },
+    {
+      "artist_id": "4r63FhuTkUYltbVAg5TQnk",
+      "artwork_url": "https://i.scdn.co/image/ab6761610000e5ebbd6918901c1714560669f570",
+      "genres": [
+        "hip hop",
+        "north carolina hip hop",
+        "pop rap",
+        "rap",
+        "trap"
+      ]
+    },
+    {
+      "artist_id": "0jNDKefhfSbLR9sFvcPLHo",
+      "artwork_url": "https://i.scdn.co/image/ab6761610000e5eb082c34e225913f6f5ef6f420",
+      "genres": [
+        "brostep",
+        "edm",
+        "electro house",
+        "electronic trap",
+        "future bass",
+        "pop dance"
+      ]
+    }
+  ],
+  "albums": [
+    {
+      "album_id": "0NBTBo1qrg554sAj79nEqD",
+      "artwork_url": "https://i.scdn.co/image/ab67616d0000b2736818aa231aa543cf87e1374a",
+      "release_date": "2017-07-14"
+    },
+    {
+      "album_id": "6SL49HqoUwu2hhfukBAK3Q",
+      "artwork_url": "https://i.scdn.co/image/ab67616d0000b273e818d05b79be19f4d49f1ebf",
+      "release_date": "2020-08-04"
+    },
+    {
+      "album_id": "046wH7DEfUumC5h9ykIEkd",
+      "artwork_url": "https://i.scdn.co/image/ab67616d0000b2738c2877b422fdee55ad880ead",
+      "release_date": "2021-06-04"
+    }
+  ]
+}

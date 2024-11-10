@@ -1,0 +1,6 @@
+**/.DS_Store
+**/config.yaml
+**/spotify_api.log
+**/data/raw/**
+**/data/processed/**
+**/data/test/**
