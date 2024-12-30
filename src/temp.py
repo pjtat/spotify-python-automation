@@ -1,12 +1,6 @@
-from api_handler import SpotifyApiClient
+import json 
 
-SCOPE = "user-follow-modify user-follow-read"
-
-def main():
-    spotify_api_handler = SpotifyApiClient()
-    spotify_api_handler.authenticate_user(SCOPE)
-    following = spotify_api_handler.make_request('me/following?type=artist&limit=5')
-    print(following)
-
-if __name__ == "__main__":
-    main()
+# Determine how many entries are in the file
+with open('data/processed/combined_spotify_data_modified.json', 'r') as file:
+    data = json.load(file)
+    print(len(data))

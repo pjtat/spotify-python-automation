@@ -41,13 +41,13 @@ class ModifyDataExports:
     def remove_unneeded_data(self):
         # Pull in the existing combined export
         modified_data = self.file_handler.pull_modified_data()
-            
+
         # Remove unneeded fields 
         for item in modified_data:
             for field in self.config.get('unneeded_fields'):
                 if field in item:
                     del item[field]
-        
+
         # Overwrite the existing file with the new data
         self.file_handler.export_to_folder(modified_data, 'combined_spotify_data_modified.json', 'processed')
 

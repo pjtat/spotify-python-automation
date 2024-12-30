@@ -40,6 +40,12 @@ class FileHandler:
         with open(modified_file_path, 'w') as f:
             json.dump(combined_spotify_data, f, indent=2)
     
+    def pull_raw_data(self):
+        raw_file_path = os.path.join(self.export_path, 'raw', 'combined_spotify_data_raw.json')
+        with open(raw_file_path, 'r') as f:
+            raw_data = json.load(f)
+        return raw_data
+    
     def pull_modified_data(self):
         modified_file_path = os.path.join(self.export_path, 'processed', 'combined_spotify_data_modified.json')
         with open(modified_file_path, 'r') as f:
@@ -48,10 +54,12 @@ class FileHandler:
 
     def export_to_folder(self, data, file_name, export_folder):
         # Create the directory if it doesn't exist
-        os.makedirs(export_folder, exist_ok=True)
+        os.makedirs(os.path.join(self.export_path, export_folder), exist_ok=True)
         
-        # Now write the file
-        with open(os.path.join(export_folder, file_name), 'w') as f:
+        print(f"Exporting {file_name} to {os.path.join(self.export_path, export_folder)}")
+        
+        # Write the file to the provided folder
+        with open(os.path.join(self.export_path, export_folder, file_name), 'w') as f:
             json.dump(data, f, indent=2)
     
     def create_example_file(self, file, file_name, folder_name):

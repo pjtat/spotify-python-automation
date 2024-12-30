@@ -42,8 +42,8 @@ class HistoryAnalyzer:
         # Sort the tracks by number of plays
         sorted_tracks = sorted(top_tracks.items(), key=lambda x: x[1], reverse=True)
 
-        # Return the top tracks
-        return [track[0] for track in sorted_tracks[:quantity]]
+        # Return the top tracks with play counts
+        return [f"{i+1}. {track[0]} - {track[1]} plays" for i, track in enumerate(sorted_tracks[:quantity])]
 
     def get_top_artists(self, quantity: int, query_start_date: datetime, query_end_date: datetime) -> list[str]:
         # Pull in the modified data
@@ -65,8 +65,8 @@ class HistoryAnalyzer:
         # Sort the artists by number of plays
         sorted_artists = sorted(top_artists.items(), key=lambda x: x[1], reverse=True)
 
-        # Return the top artists
-        return [artist[0] for artist in sorted_artists[:quantity]] 
+        # Return the top artists with play counts
+        return [f"{i+1}. {artist[0]} - {artist[1]} plays" for i, artist in enumerate(sorted_artists[:quantity])]
 
     def get_top_albums(self, quantity: int, query_start_date: datetime, query_end_date: datetime) -> list[str]:
         # Pull in the modified data
@@ -89,8 +89,8 @@ class HistoryAnalyzer:
         # Sort the albums by number of plays
         sorted_albums = sorted(top_albums.items(), key=lambda x: x[1], reverse=True)
 
-        # Return the top albums
-        return [album[0] for album in sorted_albums[:quantity]] 
+        # Return the top albums with play counts
+        return [f"{i+1}. {album[0]} - {album[1]} plays" for i, album in enumerate(sorted_albums[:quantity])]
 
     def get_top_new_tracks_of_the_year(self, quantity: int, year: int) -> list[str]:
         # Pull in the modified data
@@ -122,8 +122,8 @@ class HistoryAnalyzer:
         # Sort the tracks by number of plays
         sorted_tracks = sorted(top_tracks.items(), key=lambda x: x[1], reverse=True)
 
-        # Return the top tracks
-        return [track[0] for track in sorted_tracks[:quantity]]
+        # Return the top tracks with play counts
+        return [f"{i+1}. {track[0]} - {track[1]} plays" for i, track in enumerate(sorted_tracks[:quantity])]
     
     def get_top_new_albums_of_the_year(self, quantity: int, year: int) -> list[str]:
         # Pull in the modified data
@@ -155,8 +155,8 @@ class HistoryAnalyzer:
         # Sort the albums by number of plays
         sorted_albums = sorted(top_albums.items(), key=lambda x: x[1], reverse=True)
 
-        # Return the top albums
-        return [album[0] for album in sorted_albums[:quantity]]
+        # Return the top albums with play counts
+        return [f"{i+1}. {album[0]} - {album[1]} plays" for i, album in enumerate(sorted_albums[:quantity])]
     
     def get_top_new_artists_of_the_year(self, quantity: int, year: int) -> list[str]:
         # Pull in the modified data
@@ -187,11 +187,14 @@ class HistoryAnalyzer:
         # Sort the artists by number of plays
         sorted_artists = sorted(top_artists.items(), key=lambda x: x[1], reverse=True)
 
-        # Return the top artists
-        return [artist[0] for artist in sorted_artists[:quantity]]
+        # Return the top artists with play counts
+        return [f"{i+1}. {artist[0]} - {artist[1]} plays" for i, artist in enumerate(sorted_artists[:quantity])]
 
 if __name__ == "__main__":
     history_analyzer = HistoryAnalyzer()
-    print(history_analyzer.get_top_new_tracks_of_the_year(20, 2024))
-    print(history_analyzer.get_top_new_albums_of_the_year(20, 2024))
-    print(history_analyzer.get_top_new_artists_of_the_year(20, 2024))
+    print(history_analyzer.get_top_albums(20, datetime(2024, 1, 1), datetime(2024, 12, 31)))
+    print(history_analyzer.get_top_artists(20, datetime(2024, 1, 1), datetime(2024, 12, 31)))
+    print(history_analyzer.get_top_tracks(20, datetime(2024, 1, 1), datetime(2024, 12, 31)))
+    # print(history_analyzer.get_top_new_tracks_of_the_year(20, 2024))
+    # print(history_analyzer.get_top_new_albums_of_the_year(20, 2024))
+    # print(history_analyzer.get_top_new_artists_of_the_year(20, 2024))
