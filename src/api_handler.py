@@ -3,18 +3,9 @@ import logging
 import time
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-
-from config import Config
 from datetime import datetime, timedelta
 
-# Define request information 
-TOKEN_URL = "https://accounts.spotify.com/api/token"
-AUTH_URL = "https://accounts.spotify.com/authorize"
-REDIRECT_URI = "http://localhost:8888/callback" 
-
-# Constants
-MAX_RETRIES = 3
-DAILY_REQUEST_LIMIT = 1000
+from config import Config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -63,18 +54,23 @@ class RateLimiter:
         self.requests_made_today += 1
         self.last_updated = now
 
-class RateLimitStatus:
-    @staticmethod
-    def get_status(rate_limiter):
+    def get_status(self) -> dict:
+        """
+        Get the current rate limiting status.
+        
+        Returns:
+            dict: Current rate limit status including requests made, remaining tokens,
+                 and time until reset
+        """
         now = datetime.now()
-        time_until_reset = (rate_limiter.day_start + timedelta(days=1)) - now
+        time_until_reset = (self.day_start + timedelta(days=1)) - now
         
         return {
-            "requests_made_today": rate_limiter.requests_made_today,
-            "remaining_tokens": rate_limiter.tokens,
-            "total_daily_limit": rate_limiter.requests_per_day,
+            "requests_made_today": self.requests_made_today,
+            "remaining_tokens": self.tokens,
+            "total_daily_limit": self.requests_per_day,
             "time_until_daily_reset": str(time_until_reset),
-            "last_request_time": rate_limiter.last_updated.strftime("%Y-%m-%d %H:%M:%S")
+            "last_request_time": self.last_updated.strftime("%Y-%m-%d %H:%M:%S")
         }
 
 class SpotifyErrorHandler:
@@ -116,46 +112,74 @@ class SpotifyErrorHandler:
             raise requests.exceptions.HTTPError(error_msg)
 
 class SpotifyApiClient:
+    # Class-level constants
+    TOKEN_URL = "https://accounts.spotify.com/api/token"
+    AUTH_URL = "https://accounts.spotify.com/authorize"
+    REDIRECT_URI = "http://localhost:8888/callback"
+    MAX_RETRIES = 3
+    DAILY_REQUEST_LIMIT = 1000
+    SCOPES = [
+        "user-follow-modify",
+        "user-follow-read",
+        "user-top-read",
+        "user-library-read",
+        "playlist-read-private"
+    ]
+    
     def __init__(self, max_retries: int = MAX_RETRIES) -> None:
         self.base_url = "https://api.spotify.com/v1/"
-        self.rate_limiter = RateLimiter(DAILY_REQUEST_LIMIT)
+        self.rate_limiter = RateLimiter(self.DAILY_REQUEST_LIMIT)
         self.max_retries = max_retries
         self.error_handler = SpotifyErrorHandler()
-        # Initialize without token - will be set during OAuth flow
-        self.access_token = None
-        self.refresh_token = None
-        self.headers = {}
+        
+        # Create SpotifyOAuth manager during initialization
+        self.auth_manager = SpotifyOAuth(
+            client_id=Config.get('client_id'),
+            client_secret=Config.get('client_secret'),
+            redirect_uri=self.REDIRECT_URI,
+            scope=' '.join(self.SCOPES),
+            cache_path='.spotify_cache'
+        )
+        
+        # Set initial tokens
+        self._refresh_token()
 
-    def authenticate_user(self, scope: str):
+    def _refresh_token(self):
+        """Refresh the access token using the auth manager"""
+        token_info = self.auth_manager.get_cached_token()
+        if not token_info:
+            token_info = self.auth_manager.get_access_token()
+        
+        self.access_token = token_info['access_token']
+        self.refresh_token = token_info.get('refresh_token')
+        self.headers = {"Authorization": f"Bearer {self.access_token}"}
+
+    def authenticate_user(self):
         """
         Authenticate with Spotify, set up tokens, and return an authenticated client.
-        
-        Args:
-            scope: The Spotify API scope(s) to request access for
             
         Returns:
             spotipy.Spotify: An authenticated Spotify client instance
         """
         # Create SpotifyOAuth manager 
-        auth_manager = SpotifyOAuth(
+        self.auth_manager = SpotifyOAuth(
             client_id=Config.get('client_id'),
             client_secret=Config.get('client_secret'),
-            redirect_uri=REDIRECT_URI,
-            scope=scope
+            redirect_uri=self.REDIRECT_URI,
+            scope=' '.join(self.SCOPES),
+            cache_path='.spotify_cache'
         )
         
         # Create Spotify client with auth manager
-        spotify_client = spotipy.Spotify(auth_manager=auth_manager)
+        spotify_client = spotipy.Spotify(auth_manager=self.auth_manager)
 
-        # Store tokens for future requests
-        self.access_token = auth_manager.get_access_token()['access_token']
-        self.refresh_token = auth_manager.get_cached_token()['refresh_token']
-        self.headers = {"Authorization": f"Bearer {self.access_token}"}
-
-        # Get current user profile
-        user_profile = spotify_client.current_user()
-        print("User ID:", user_profile['id'])
-        print("Display Name:", user_profile['display_name'])
+        # Get current user profile to verify authentication
+        try:
+            user_profile = spotify_client.current_user()
+            logging.info(f"Successfully authenticated as user: {user_profile['id']}")
+        except Exception as e:
+            logging.error(f"Authentication failed: {str(e)}")
+            raise
         
         return spotify_client
     
@@ -197,14 +221,18 @@ class SpotifyApiClient:
                 json=data if method in ['POST', 'PUT'] else None
             )
             
-            # Let the error handler handle all response status codes
             self.error_handler.handle_response(response, self.rate_limiter)
+            
+            # Handle empty responses
+            if not response.content:
+                return {}
+            
             return response.json()
             
         except requests.exceptions.HTTPError as e:
             if "401" in str(e) and auth_required and retry_count < self.max_retries:
                 logging.info(f"Access token expired, attempting refresh {retry_count + 1}/{self.max_retries}")
-                self.authenticate_user()  # Re-authenticate
+                self._refresh_token()  # New method to handle token refresh
                 return self.make_request(endpoint, method, headers, data, auth_required, retry_count + 1)
             raise e
             
@@ -219,7 +247,7 @@ class SpotifyApiClient:
             logging.error(error_msg)
             raise requests.exceptions.HTTPError(error_msg)
 
-    def make_batch_request(self, items: list, max_batch_size: int, endpoint_template: str, method: str = 'GET', headers: dict = None, data: dict = None, auth_required: bool = True) -> list:
+    def make_batch_request(self, items: list, max_batch_size: int, endpoint_template: str, response_key: str = None, method: str = 'GET', headers: dict = None, data: dict = None, auth_required: bool = True) -> tuple[list, list]:
         """
         Make batch requests to the Spotify API, splitting items into chunks.
         
@@ -227,40 +255,41 @@ class SpotifyApiClient:
             items: List of items to process in batches (e.g. track IDs, artist IDs)
             max_batch_size: Maximum number of items per request
             endpoint_template: API endpoint template with placeholder for items
+            response_key: The specific key in the response dict containing the results
             method: HTTP method (GET, POST, PUT, DELETE)
             headers: Additional headers to include
             data: Request body for POST/PUT requests
             auth_required: Whether this endpoint requires authentication
             
         Returns:
-            list: Combined results from all batch requests
+            tuple[list, list]: (successful_results, failed_batches)
         """
         results = []
+        failed_batches = []
         
-        # Process items in batches
         for i in range(0, len(items), max_batch_size):
             batch = items[i:i + max_batch_size]
-            
-            # Format the endpoint with the current batch
-            batch_endpoint = endpoint_template.format(','.join(batch))
-            
-            # Make the request for this batch
-            batch_result = self.make_request(
-                endpoint=batch_endpoint,
-                method=method,
-                headers=headers,
-                data=data,
-                auth_required=auth_required
-            )
-            
-            # Add batch results to overall results
-            if isinstance(batch_result, dict):
-                # Handle case where response is a dict with a key containing the results
-                for key in batch_result:
-                    if isinstance(batch_result[key], list):
-                        results.extend(batch_result[key])
-            elif isinstance(batch_result, list):
-                # Handle case where response is directly a list
-                results.extend(batch_result)
+            try:
+                batch_result = self.make_request(
+                    endpoint=endpoint_template.format(','.join(batch)),
+                    method=method,
+                    headers=headers,
+                    data=data,
+                    auth_required=auth_required
+                )
                 
-        return results
+                # Process results based on response structure
+                if isinstance(batch_result, list):
+                    results.extend(batch_result)
+                elif isinstance(batch_result, dict) and response_key:
+                    if response_key in batch_result:
+                        results.extend(batch_result[response_key])
+                    else:
+                        logging.warning(f"Response key '{response_key}' not found in batch result")
+                        failed_batches.append(batch)
+                
+            except Exception as e:
+                logging.error(f"Batch request failed: {str(e)}")
+                failed_batches.append(batch)
+                
+        return results, failed_batches

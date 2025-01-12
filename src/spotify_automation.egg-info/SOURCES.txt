@@ -1,0 +1,8 @@
+LICENSE
+README.md
+setup.py
+src/spotify_automation.egg-info/PKG-INFO
+src/spotify_automation.egg-info/SOURCES.txt
+src/spotify_automation.egg-info/dependency_links.txt
+src/spotify_automation.egg-info/requires.txt
+src/spotify_automation.egg-info/top_level.txt
