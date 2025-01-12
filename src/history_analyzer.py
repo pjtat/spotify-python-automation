@@ -198,9 +198,9 @@ if __name__ == "__main__":
         print("1. Get top albums for time period")
         print("2. Get top artists for time period") 
         print("3. Get top tracks for time period")
-        print("4. Get top new tracks of year")
-        print("5. Get top new albums of year")
-        print("6. Get top new artists of year")
+        print("4. Get top new tracks for a year")
+        print("5. Get top new albums for a year")
+        print("6. Get top new artists for a year")
         print("7. Exit")
 
         choice = input("\nEnter your choice (1-7): ")

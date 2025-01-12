@@ -17,7 +17,11 @@ def test():
     test_artists = 5
 
     url = f'me/following?type={REQUEST_TYPE}&limit={test_artists}'
-    response = spotify_api_handler._make_auth_request(url)
+    response = spotify_api_handler.make_get_request(url)
+    
+    # Pretty print the response
+    import json
+    print(json.dumps(response, indent=2))
 
 def main():
     # Determine top artists

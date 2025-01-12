@@ -218,3 +218,49 @@ class SpotifyApiClient:
             error_msg = f"Request failed after {self.max_retries} retries: {str(e)}"
             logging.error(error_msg)
             raise requests.exceptions.HTTPError(error_msg)
+
+    def make_batch_request(self, items: list, max_batch_size: int, endpoint_template: str, method: str = 'GET', headers: dict = None, data: dict = None, auth_required: bool = True) -> list:
+        """
+        Make batch requests to the Spotify API, splitting items into chunks.
+        
+        Args:
+            items: List of items to process in batches (e.g. track IDs, artist IDs)
+            max_batch_size: Maximum number of items per request
+            endpoint_template: API endpoint template with placeholder for items
+            method: HTTP method (GET, POST, PUT, DELETE)
+            headers: Additional headers to include
+            data: Request body for POST/PUT requests
+            auth_required: Whether this endpoint requires authentication
+            
+        Returns:
+            list: Combined results from all batch requests
+        """
+        results = []
+        
+        # Process items in batches
+        for i in range(0, len(items), max_batch_size):
+            batch = items[i:i + max_batch_size]
+            
+            # Format the endpoint with the current batch
+            batch_endpoint = endpoint_template.format(','.join(batch))
+            
+            # Make the request for this batch
+            batch_result = self.make_request(
+                endpoint=batch_endpoint,
+                method=method,
+                headers=headers,
+                data=data,
+                auth_required=auth_required
+            )
+            
+            # Add batch results to overall results
+            if isinstance(batch_result, dict):
+                # Handle case where response is a dict with a key containing the results
+                for key in batch_result:
+                    if isinstance(batch_result[key], list):
+                        results.extend(batch_result[key])
+            elif isinstance(batch_result, list):
+                # Handle case where response is directly a list
+                results.extend(batch_result)
+                
+        return results
