@@ -192,9 +192,51 @@ class HistoryAnalyzer:
 
 if __name__ == "__main__":
     history_analyzer = HistoryAnalyzer()
-    print(history_analyzer.get_top_albums(20, datetime(2024, 1, 1), datetime(2024, 12, 31)))
-    print(history_analyzer.get_top_artists(20, datetime(2024, 1, 1), datetime(2024, 12, 31)))
-    print(history_analyzer.get_top_tracks(20, datetime(2024, 1, 1), datetime(2024, 12, 31)))
-    # print(history_analyzer.get_top_new_tracks_of_the_year(20, 2024))
-    # print(history_analyzer.get_top_new_albums_of_the_year(20, 2024))
-    # print(history_analyzer.get_top_new_artists_of_the_year(20, 2024))
+    
+    while True:
+        print("\nSpotify History Analyzer Menu:")
+        print("1. Get top albums for time period")
+        print("2. Get top artists for time period") 
+        print("3. Get top tracks for time period")
+        print("4. Get top new tracks of year")
+        print("5. Get top new albums of year")
+        print("6. Get top new artists of year")
+        print("7. Exit")
+
+        choice = input("\nEnter your choice (1-7): ")
+
+        if choice == "7":
+            break
+
+        if choice in ["1", "2", "3"]:
+            start_date = datetime.strptime(input("Enter start date (YYYY-MM-DD): "), "%Y-%m-%d")
+            end_date = datetime.strptime(input("Enter end date (YYYY-MM-DD): "), "%Y-%m-%d")
+            quantity = int(input("Enter number of results to show: "))
+
+            if choice == "1":
+                print("\nTop Albums:")
+                print("\n".join(history_analyzer.get_top_albums(quantity, start_date, end_date)))
+            elif choice == "2":
+                print("\nTop Artists:")
+                print("\n".join(history_analyzer.get_top_artists(quantity, start_date, end_date)))
+            elif choice == "3":
+                print("\nTop Tracks:")
+                print("\n".join(history_analyzer.get_top_tracks(quantity, start_date, end_date)))
+
+        elif choice in ["4", "5", "6"]:
+            start_date = datetime.strptime(input("Enter start date (YYYY-MM-DD): "), "%Y-%m-%d")
+            end_date = datetime.strptime(input("Enter end date (YYYY-MM-DD): "), "%Y-%m-%d")
+            quantity = int(input("Enter number of results to show: "))
+
+            if choice == "4":
+                print("\nTop New Tracks:")
+                print("\n".join(history_analyzer.get_top_new_tracks_of_the_year(quantity, start_date, end_date)))
+            elif choice == "5":
+                print("\nTop New Albums:")
+                print("\n".join(history_analyzer.get_top_new_albums_of_the_year(quantity, start_date, end_date)))
+            elif choice == "6":
+                print("\nTop New Artists:")
+                print("\n".join(history_analyzer.get_top_new_artists_of_the_year(quantity, start_date, end_date)))
+        
+        else:
+            print("\nInvalid choice. Please try again.")
