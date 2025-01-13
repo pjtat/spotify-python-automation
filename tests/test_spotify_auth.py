@@ -21,12 +21,14 @@ class TestSpotifyAuth(unittest.TestCase):
             print(f"Successfully authenticated as user: {user['id']}")
             
             # Test getting user's playlists (requires playlist-read-private scope)
-            playlists = spotify.current_user_playlists(limit=1)
+            playlists = spotify.current_user_playlists(limit=2)
             self.assertIsNotNone(playlists)
-            
+            print(f"Preview of playlists: {playlists}")
+
             # Test getting user's followed artists (requires user-follow-read scope)
-            following = spotify.current_user_followed_artists(limit=1)
+            following = spotify.current_user_followed_artists(limit=2)
             self.assertIsNotNone(following)
+            print(f"Preview of followed artists: {following}")
 
         except Exception as e:
             self.fail(f"Authentication test failed: {str(e)}")

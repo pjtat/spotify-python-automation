@@ -24,24 +24,28 @@ class RateLimiter:
             requests_per_day: Maximum number of requests allowed per day
         """
         self.requests_per_day = requests_per_day
-        self.tokens = requests_per_day
+        self.tokens = float(requests_per_day)  # Convert to float explicitly
         self.last_updated = datetime.now()
         self.requests_made_today = 0
         self.day_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        self.tokens_per_second = self.requests_per_day / (24 * 3600)  # Pre-calculate rate
     
     def acquire(self):
         now = datetime.now()
-        time_passed = now - self.last_updated
         
         # Reset daily counter if it's a new day
-        if now.date() > self.day_start.date():
+        current_date = now.date()
+        if current_date > self.day_start.date():
+            self.tokens = float(self.requests_per_day)
             self.requests_made_today = 0
-            self.day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            self.day_start = datetime.combine(current_date, datetime.min.time())
+            return
         
-        # Replenish tokens based on time passed
+        # Optimize token replenishment calculation
+        time_passed = (now - self.last_updated).total_seconds()
         self.tokens = min(
             self.requests_per_day,
-            self.tokens + (time_passed.total_seconds() * self.requests_per_day / (24 * 3600))
+            self.tokens + (time_passed * self.tokens_per_second)
         )
         
         if self.tokens < 1:
@@ -121,9 +125,8 @@ class SpotifyApiClient:
     SCOPES = [
         "user-follow-modify",
         "user-follow-read",
-        "user-top-read",
         "user-library-read",
-        "playlist-read-private"
+        "user-library-modify"
     ]
     
     def __init__(self, max_retries: int = MAX_RETRIES) -> None:
@@ -143,6 +146,7 @@ class SpotifyApiClient:
         
         # Set initial tokens
         self._refresh_token()
+        self._session = requests.Session()  # Add persistent session
 
     def _refresh_token(self):
         """Refresh the access token using the auth manager"""
@@ -183,7 +187,7 @@ class SpotifyApiClient:
         
         return spotify_client
     
-    def make_request(self, endpoint: str, method: str = 'GET', headers: dict = None, data: dict = None, auth_required: bool = True, retry_count: int = 0) -> dict:
+    def make_request(self, endpoint: str, method: str = 'GET', headers: dict = None, data: dict = None, auth_required: bool = True, retry_count: int = 0, limit: int = None, offset: int = None) -> dict:
         """
         Make a request to the Spotify API.
         
@@ -191,34 +195,31 @@ class SpotifyApiClient:
             endpoint: API endpoint to call
             method: HTTP method (GET, POST, PUT, DELETE)
             headers: Additional headers to include
-            data: Request body for POST/PUT requests
+            data: Request body for POST/PUT/DELETE requests
             auth_required: Whether this endpoint requires authentication
             retry_count: Current retry attempt number
-            
+            limit: Maximum number of items to return
+            offset: Offset for pagination
         Returns:
             dict: Parsed JSON response data
         """
-        # Construct full URL if endpoint is relative
-        url = endpoint if endpoint.startswith('http') else self.base_url + endpoint
+
+        logging.info(f"Making {method} request to: {endpoint if endpoint.startswith('http') else f'{self.base_url}{endpoint}'}")
         
-        # Prepare headers
-        request_headers = {}
-        if auth_required:
-            if not self.access_token:
-                raise Exception("No access token available. User must authenticate first.")
-            request_headers.update(self.headers)
-        if headers:
-            request_headers.update(headers)
-            
-        logging.info(f"Making {method} request to: {url}")
+        url = endpoint if endpoint.startswith('http') else f"{self.base_url}{endpoint}"
+        
+        request_headers = {**self.headers, **(headers or {})} if auth_required else headers or {}
+        
         self.rate_limiter.acquire()
         
         try:
-            response = requests.request(
+            response = self._session.request(
                 method=method,
                 url=url,
                 headers=request_headers,
-                json=data if method in ['POST', 'PUT'] else None
+                json=data if method in ['POST', 'PUT', 'DELETE'] else None,
+                timeout=10,
+                params={'limit': limit, 'offset': offset} if limit or offset else None
             )
             
             self.error_handler.handle_response(response, self.rate_limiter)
@@ -227,7 +228,12 @@ class SpotifyApiClient:
             if not response.content:
                 return {}
             
-            return response.json()
+            response_data = response.json()
+            # Log preview of response data
+            preview = str(response_data)[:200] + '...' if len(str(response_data)) > 200 else str(response_data)
+            logging.info(f"Response preview: {preview}")
+            
+            return response_data
             
         except requests.exceptions.HTTPError as e:
             if "401" in str(e) and auth_required and retry_count < self.max_retries:
@@ -247,49 +253,33 @@ class SpotifyApiClient:
             logging.error(error_msg)
             raise requests.exceptions.HTTPError(error_msg)
 
-    def make_batch_request(self, items: list, max_batch_size: int, endpoint_template: str, response_key: str = None, method: str = 'GET', headers: dict = None, data: dict = None, auth_required: bool = True) -> tuple[list, list]:
+    def make_batch_request(self, items: list, max_batch_size: int, endpoint_template: str, method: str = 'GET', headers: dict = None, data: dict = None, auth_required: bool = True, key: str = None) -> list:
         """
-        Make batch requests to the Spotify API, splitting items into chunks.
-        
-        Args:
-            items: List of items to process in batches (e.g. track IDs, artist IDs)
-            max_batch_size: Maximum number of items per request
-            endpoint_template: API endpoint template with placeholder for items
-            response_key: The specific key in the response dict containing the results
-            method: HTTP method (GET, POST, PUT, DELETE)
-            headers: Additional headers to include
-            data: Request body for POST/PUT requests
-            auth_required: Whether this endpoint requires authentication
-            
-        Returns:
-            tuple[list, list]: (successful_results, failed_batches)
+        Make batch requests to the Spotify API, replacing failed items with "N/A"
         """
         results = []
-        failed_batches = []
+        batches = [items[i:i + max_batch_size] for i in range(0, len(items), max_batch_size)]
         
-        for i in range(0, len(items), max_batch_size):
-            batch = items[i:i + max_batch_size]
+        for batch in batches:
             try:
+                endpoint = endpoint_template.format(','.join(batch))
                 batch_result = self.make_request(
-                    endpoint=endpoint_template.format(','.join(batch)),
+                    endpoint=endpoint,
                     method=method,
                     headers=headers,
                     data=data,
                     auth_required=auth_required
                 )
                 
-                # Process results based on response structure
                 if isinstance(batch_result, list):
                     results.extend(batch_result)
-                elif isinstance(batch_result, dict) and response_key:
-                    if response_key in batch_result:
-                        results.extend(batch_result[response_key])
-                    else:
-                        logging.warning(f"Response key '{response_key}' not found in batch result")
-                        failed_batches.append(batch)
+                elif key and isinstance(batch_result, dict):
+                    results.extend(batch_result[key])
+                else:
+                    results.append(batch_result)
                 
             except Exception as e:
-                logging.error(f"Batch request failed: {str(e)}")
-                failed_batches.append(batch)
-                
-        return results, failed_batches
+                logging.warning(f"Batch request failed: {str(e)}, replacing {len(batch)} items with N/A")
+                results.extend(["N/A"] * len(batch))
+        
+        return results

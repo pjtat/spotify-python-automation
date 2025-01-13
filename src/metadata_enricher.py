@@ -5,7 +5,6 @@ from api_handler import SpotifyApiClient
 class MetadataEnricher:
     def __init__(self) -> None:
         self.spotify_api_handler = SpotifyApiClient()
-
         self.MAX_REQUESTS = 50
 
     def get_ids(self, track_ids: 'str | list[str]', return_type: 'str') -> 'str':
@@ -33,7 +32,8 @@ class MetadataEnricher:
         track_data = self.spotify_api_handler.make_batch_request(
             items=track_ids,
             max_batch_size=self.MAX_REQUESTS,
-            endpoint_template='tracks?ids={}'
+            endpoint_template='tracks?ids={}',
+            key='tracks'
         )
 
         # Get the artist or album ids
@@ -48,7 +48,7 @@ class MetadataEnricher:
 
         return return_ids
 
-    def get_artist_genres(self, artist_ids: 'str | list[str]') -> 'dict[str, list[str]]':      
+    def get_artist_genres(self, artist_ids: 'str | list[str]') -> 'list[str]':      
         # Convert single string to list if necessary
         artist_ids = [artist_ids] if isinstance(artist_ids, str) else artist_ids
 
@@ -59,13 +59,14 @@ class MetadataEnricher:
         artists_data = self.spotify_api_handler.make_batch_request(
             items=artist_ids,
             max_batch_size=self.MAX_REQUESTS,
-            endpoint_template='artists?ids={}'
+            endpoint_template='artists?ids={}',
+            key='artists'
         )
         
         for artist in artists_data:
-            artist_genres.append(artist['genres'])
+            artist_genres.append(artist['genres'])  
             
-        return artist_genres
+        return artist_genres 
     
     def get_artist_artwork(self, artist_ids: 'str | list[str]') -> 'dict[str, str]':
         # Convert single string to list if necessary
@@ -78,7 +79,8 @@ class MetadataEnricher:
         artists_data = self.spotify_api_handler.make_batch_request(
             items=artist_ids,
             max_batch_size=self.MAX_REQUESTS,
-            endpoint_template='artists?ids={}'
+            endpoint_template='artists?ids={}',
+            key='artists'
         )
 
         for artist in artists_data:
@@ -97,42 +99,14 @@ class MetadataEnricher:
         albums_data = self.spotify_api_handler.make_batch_request(
             items=album_ids,
             max_batch_size=self.MAX_REQUESTS,
-            endpoint_template='albums?ids={}'
+            endpoint_template='albums?ids={}',
+            key='albums'
         )
 
         for album in albums_data:
             album_artwork.append(album['images'][0]['url'])
 
         return album_artwork
-    
-    def get_track_audio_features(self, track_ids: 'str | list[str]') -> 'dict[str, list[str]]':
-        # Convert single string to list if necessary
-        track_ids = [track_ids] if isinstance(track_ids, str) else track_ids
-
-        # Initialize the list to store track audio features
-        track_audio_features = []
-
-        # Get audio features for all tracks
-        tracks_data = self.spotify_api_handler.make_batch_request(
-            items=track_ids,
-            max_batch_size=self.MAX_REQUESTS,
-            endpoint_template='audio-features?ids={}'
-        )
-
-        for track in tracks_data:
-            track_audio_features.append({
-                'danceability': track['danceability'],
-                'energy': track['energy'], 
-                'loudness': track['loudness'],
-                'speechiness': track['speechiness'],
-                'acousticness': track['acousticness'],
-                'instrumentalness': track['instrumentalness'],
-                'liveness': track['liveness'],
-                'valence': track['valence'],
-                'tempo': track['tempo']
-            })
-
-        return track_audio_features
 
 if __name__ == "__main__":
     while True:
@@ -140,13 +114,12 @@ if __name__ == "__main__":
         print("1. Test get_artist_genres")
         print("2. Test get_artist_artwork") 
         print("3. Test get_album_artwork")
-        print("4. Test get_audio_features")
-        print("5. Test all functions")
-        print("6. Exit")
+        print("4. Test all functions")
+        print("5. Exit")
         
-        choice = input("\nEnter your choice (1-6): ")
+        choice = input("\nEnter your choice (1-5): ")
         
-        if choice == '6':
+        if choice == '5':
             break
             
         # Load test data and authenticate
@@ -170,9 +143,6 @@ if __name__ == "__main__":
             print("\nTesting get_album_artwork:")
             print(metadata_enricher.get_album_artwork(test_album_ids))
         elif choice == '4':
-            print("\nTesting get_audio_features:")
-            print(metadata_enricher.get_track_audio_features(test_track_ids))
-        elif choice == '5':
             print("\nTesting all functions:")
             print("\nArtist Genres:")
             print(metadata_enricher.get_artist_genres(test_artist_ids))
@@ -180,7 +150,5 @@ if __name__ == "__main__":
             print(metadata_enricher.get_artist_artwork(test_artist_ids))
             print("\nAlbum Artwork:")
             print(metadata_enricher.get_album_artwork(test_album_ids))
-            print("\nAudio Features:")
-            print(metadata_enricher.get_track_audio_features(test_track_ids))
         else:
-            print("\nInvalid choice! Please enter a number between 1 and 6.")
+            print("\nInvalid choice! Please enter a number between 1 and 5.")
