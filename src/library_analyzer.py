@@ -75,21 +75,37 @@ class LibraryAnalyzer:
         offset = 0
 
         # Determine the total number of artists in the library
-        total_artists_in_library = self.get_followed_artist_count()
+        total_followed_artists = self.get_followed_artist_count()
 
-        while offset < total_artists_in_library:
-            # Get batch of artists
+        # Initialize after parameter for pagination
+        after = None
+        
+        while len(followed_artists) < total_followed_artists:
+            # Get batch of artists using cursor-based pagination
+            limit = min(50, total_followed_artists - len(followed_artists))
+            
+            # Build endpoint with required type parameter
+            endpoint = 'me/following?type=artist'  # Add type=artist
+            
+            # Add after parameter if we have one
+            if after:
+                endpoint += f'&after={after}'
+                
             response = self.spotify_api_handler.make_request(
-                endpoint='me/following?type=artist',
-                limit=self.MAX_REQUESTS,
-                offset=offset
+                endpoint=endpoint,
+                method='GET',
+                limit=limit
             )
 
             # Add artists from this batch
-            followed_artists.extend(response['artists']['items'])
+            current_batch = response['artists']['items']
+            followed_artists.extend(current_batch)
 
-            # Increment offset for next batch
-            offset += self.MAX_REQUESTS
+            # Get the last artist ID for next request
+            if current_batch and len(followed_artists) < total_followed_artists:
+                after = current_batch[-1]['id']
+            else:
+                break
         
         # Simplify the followed artists 
         simplified_followed_artists = []
@@ -111,25 +127,29 @@ class LibraryAnalyzer:
         library_artists = self.load_library_artists()
         
         # Create a set of followed artist IDs for efficient lookup
-        followed_artist_ids = {artist['id'] for artist in followed_artists}
+        # Convert IDs to strings to ensure consistent comparison
+        followed_artist_ids = {str(artist['id']).strip() for artist in followed_artists}
         
         # Find artists in library that aren't in followed_artist_ids
+        # Convert library artist IDs to strings as well
         unfollowed_artists = [
             artist for artist in library_artists 
-            if artist['id'] not in followed_artist_ids
+            if str(artist['id']).strip() not in followed_artist_ids
         ]
 
         # Remove duplicates while preserving artist name and id
         unique_unfollowed_artists = []
         seen = set()
         for artist in unfollowed_artists:
-            artist_tuple = (artist['name'], artist['id'])
+            artist_tuple = (artist['name'], str(artist['id']).strip())
             if artist_tuple not in seen:
                 seen.add(artist_tuple)
-                unique_unfollowed_artists.append(artist)
-        unfollowed_artists = unique_unfollowed_artists
+                unique_unfollowed_artists.append({
+                    'name': artist['name'],
+                    'id': str(artist['id']).strip()
+                })
         
-        return unfollowed_artists
+        return unique_unfollowed_artists
 
     def load_library_artists(self) -> list[str]:
         # Open the library tracks file
@@ -149,9 +169,6 @@ class LibraryAnalyzer:
 
         # Get the artist name and ID from the track information
         artists = [{'name': track['artists'][0]['name'], 'id': track['artists'][0]['id']} for track in track_info]
-
-        # Remove the track ID from the track information
-        artists = [{'name': artist['name'], 'id': artist['id']} for artist in artists]
 
         # Remove duplicates while preserving artist name and id
         unique_artists = []
@@ -184,9 +201,6 @@ class LibraryAnalyzer:
 
         # Get the albums and their IDs from the track information
         albums = [{'name': track['album']['name'], 'id': track['album']['id']} for track in track_info]
-        
-        # Remove the track ID from the track information
-        albums = [{'name': album['name'], 'id': album['id']} for album in albums]
 
         # Remove duplicates while preserving album name and id
         unique_albums = []
@@ -282,20 +296,12 @@ class LibraryAnalyzer:
         track_ids_to_remove = []
         
         # Get the track IDs to remove from the duplicate tracks
-        for track in duplicate_tracks:
+        for track in duplicate_tracks[:]:  # Create a copy for iteration
             # Pull the additional track IDs to remove (leaving the first one)
             individual_track_ids_to_remove = list(track.values())[0]['ids'][1:]
 
-            # Remove this track from the duplicate tracks
-            duplicate_tracks.remove(track)
-
             # Add each track ID to a list
-            for track_id in individual_track_ids_to_remove:
-                track_ids_to_remove.append(track_id)
-        
-        # Overwrite duplicate tracks file with updated data
-        with open('data/processed/duplicate_library_tracks.json', 'w') as f:
-            json.dump(duplicate_tracks, f, indent=4)
+            track_ids_to_remove.extend(individual_track_ids_to_remove)
         
         # Remove duplicate tracks in batches
         while track_ids_to_remove:
@@ -310,7 +316,7 @@ class LibraryAnalyzer:
             self.spotify_api_handler.make_request(
                 endpoint='me/tracks',
                 method='DELETE',
-                data=formatted_data,  # Send formatted data
+                data=formatted_data
             )
             
             # Remove the processed batch
@@ -318,14 +324,18 @@ class LibraryAnalyzer:
 
     def follow_library_artists(self) -> None:
         # Get the unfollowed artists from my library
-        # unfollowed_artists = self.find_unfollowed_library_artists()
-        unfollowed_artists = ['4j7DrazfBZLLD0OrVoAtEe']
-        # Follow the unfollowed artists
-        for artist in unfollowed_artists:
-            self.spotify_api_handler.make_request(
-                endpoint=f'me/following?type=artist&ids={artist["id"]}',
-                method='PUT'
-            )
+        unfollowed_artists = self.find_unfollowed_library_artists()
+
+        # Isolate the artist IDs
+        unfollowed_artist_ids = [artist['id'] for artist in unfollowed_artists]
+
+        # In batches, follow the unfollowed artists
+        self.spotify_api_handler.make_batch_request(
+            items=unfollowed_artist_ids,
+            max_batch_size=self.MAX_REQUESTS,
+            endpoint_template='me/following?type=artist&ids={}',
+            method='PUT'
+        )
     
 
 if __name__ == '__main__':
@@ -333,15 +343,17 @@ if __name__ == '__main__':
     
     while True:
         print("\n=== Spotify Library Analysis ===")
-        print("1. Fetch library track count")
-        print("2. Fetch all library tracks")
-        print("3. Fetch all library artists")
-        print("4. Fetch all library albums")
-        print("5. Find duplicate library tracks")
-        print("6. Remove duplicate library tracks")
-        print("7. Get followed artists")
-        print("8. Find unfollowed library artists")
-        print("9. Get library genres")
+        print("1. Library - Fetch library track count")
+        print("2. Library - Fetch all library tracks")
+        print("3. Library - Fetch all library artists")
+        print("4. Library - Fetch all library albums")
+        print("5. Duplicates - Find duplicate library tracks")
+        print("6. Duplicates - Remove duplicate library tracks")
+        print("7. Following - Get followed artist count")
+        print("8. Following - Get followed artists")
+        print("9. Following - Fetch unfollowed library artists") 
+        print("10. Following - Follow unfollowed library artists")
+        print("11. Genres - Get library genres")
         print("99. Exit")
         
         choice = input("\nEnter your choice (1-99): ")
@@ -386,18 +398,28 @@ if __name__ == '__main__':
                 print("\nNo duplicate tracks file found. Please run option 5 first.")
                 
         elif choice == '7':
+            print("\nGetting followed artist count...")
+            followed_count = analyzer.get_followed_artist_count()
+            print(f"You follow {followed_count} artists")
+            
+        elif choice == '8':
             print("\nFetching followed artists...")
             followed_artists = analyzer.get_followed_artists()
             print(f"Successfully retrieved {len(followed_artists)} followed artists")
             print(followed_artists)
             
-        elif choice == '8':
+        elif choice == '9':
             print("\nFinding unfollowed library artists...")
             unfollowed_artists = analyzer.find_unfollowed_library_artists()
             print(f"Successfully identified {len(unfollowed_artists)} unfollowed library artists")
             print(unfollowed_artists)
             
-        elif choice == '9':
+        elif choice == '10':
+            print("\nFollowing missing library artists...")
+            analyzer.follow_library_artists()
+            print("Successfully followed library artists")
+            
+        elif choice == '11':
             print("\nFetching library genres...")
             top_n = input("Enter number of top genres to display (press Enter for all): ")
             top_n = int(top_n) if top_n.strip() else None
