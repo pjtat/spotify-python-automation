@@ -81,7 +81,7 @@ class SpotifyErrorHandler:
     @staticmethod
     def handle_response(response, rate_limiter=None):
         """Handle different response status codes from Spotify API"""
-        if response.status_code == 200:
+        if response.status_code in [200, 201]:  # Add 201 as a success code
             logging.info(f"Successfully made request with status code {response.status_code}")
             return True
 
@@ -112,7 +112,8 @@ class SpotifyErrorHandler:
 
         else:
             error_msg = f"HTTP error occurred: {response.status_code}"
-            logging.error(error_msg)
+            if response.text:
+                error_msg += f"\nResponse text: {response.text}"
             raise requests.exceptions.HTTPError(error_msg)
 
 class SpotifyApiClient:
@@ -126,7 +127,8 @@ class SpotifyApiClient:
         "user-follow-modify",
         "user-follow-read",
         "user-library-read",
-        "user-library-modify"
+        "user-library-modify",
+        "playlist-modify-private"
     ]
     
     def __init__(self, max_retries: int = MAX_RETRIES) -> None:

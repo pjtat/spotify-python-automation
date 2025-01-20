@@ -50,7 +50,33 @@ class LibraryAnalyzer:
         # Print the raw library track data to JSON 
         with open('data/raw/library_tracks_raw.json', 'w') as f:
             json.dump(library_tracks, f, indent=4)
+
+        # Extract artist IDs from track info
+        artist_ids = []
+        for track in library_tracks:
+            # Access the correct path to artist ID
+            artist_id = track['track']['artists'][0]['id']
+            artist_ids.append(artist_id)
         
+        # Get artist information in batches
+        artist_info = self.spotify_api_handler.make_batch_request(
+            items=artist_ids,  # No need to filter None values now
+            max_batch_size=self.MAX_REQUESTS,
+            endpoint_template='artists?ids={}',
+            key='artists'
+        )
+        
+        # Create a lookup dictionary for artist genres
+        artist_genres = {}
+        for artist in artist_info:
+            if artist is not None:  # Check if artist exists
+                artist_genres[artist['id']] = artist.get('genres', [])
+        
+        # Add genres to library tracks
+        for i, track in enumerate(library_tracks):
+            artist_id = track['track']['artists'][0]['id']  # Get correct artist ID
+            track['genres'] = artist_genres.get(artist_id, [])
+
         # Extract just the basic track info we need
         simplified_tracks = []
         for track in library_tracks:
@@ -59,7 +85,8 @@ class LibraryAnalyzer:
                 'artist': track['track']['artists'][0]['name'],
                 'album': track['track']['album']['name'],
                 'id': track['track']['id'],
-                'added_at': track['added_at']
+                'added_at': track['added_at'],
+                'genres': track['genres']
             }
             simplified_tracks.append(track_info)
 
